@@ -1,2 +1,4 @@
 gradio>=5.0.0
 requests
+plotly
+pandas
