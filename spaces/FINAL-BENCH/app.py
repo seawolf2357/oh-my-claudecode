@@ -442,7 +442,7 @@ with gr.Blocks(theme=gr.themes.Soft(primary_hue="indigo"), css=CSS, title="FINAL
             with gr.Row():
                 with gr.Column():
                     gr.Markdown("**Problem Prompt**")
-                    prompt_box = gr.Code(language="text", label="Prompt", interactive=False)
+                    prompt_box = gr.Textbox(label="Prompt", interactive=False, lines=6)
                 with gr.Column():
                     gr.Markdown("**Kimi K2.5 Solution**")
                     code_box = gr.Code(language="python", label="Generated Code", interactive=False)
