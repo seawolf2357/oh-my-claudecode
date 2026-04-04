@@ -9,10 +9,11 @@ app_file: app.py
 pinned: false
 ---
 
-# FINAL-BENCH: oh-my-claudecode SWE-bench Benchmark Dashboard
+# FINAL-BENCH: Kimi K2.5 Live Coding Benchmark
 
-Visualizes **Vanilla Claude Code vs OMC-Enhanced** performance on SWE-bench Verified.
+Real-time coding benchmark that evaluates **Kimi K2.5** on 20 programming problems.
 
-- **Benchmark Dashboard**: Pass rate comparison, metrics, per-repository breakdown
-- **Failure Analysis**: 12-category failure classification, side-by-side comparison
-- **AI Analysis**: Kimi K2.5 powered benchmark analyst with pre-loaded context
+- **Run Benchmark**: Kimi K2.5 solves all 20 problems, code is executed, tests are verified live
+- **Test Single Problem**: Try individual problems and inspect generated code
+- **AI Analysis**: Kimi K2.5 analyzes its own benchmark results
+- **Problem Set**: Browse all 20 problems (Easy/Medium/Hard, 12 categories)
