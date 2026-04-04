@@ -44,7 +44,10 @@ def chat(message, history):
         if data.strip() == "[DONE]":
             break
         chunk = json.loads(data)
-        delta = chunk["choices"][0].get("delta", {})
+        choices = chunk.get("choices", [])
+        if not choices:
+            continue
+        delta = choices[0].get("delta", {})
         token = delta.get("content", "")
         if token:
             partial += token
@@ -55,7 +58,6 @@ demo = gr.ChatInterface(
     fn=chat,
     title="FINAL-BENCH",
     description="Kimi K2.5 (Fireworks AI)",
-    examples=["Hello, how are you?", "Explain quantum computing in simple terms."],
     type="tuples",
 )
 
