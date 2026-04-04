@@ -9,11 +9,16 @@ app_file: app.py
 pinned: false
 ---
 
-# FINAL-BENCH: Kimi K2.5 Live Coding Benchmark
+# FINAL-BENCH: A/B Coding Benchmark
 
-Real-time coding benchmark that evaluates **Kimi K2.5** on 20 programming problems.
+**Same model (Kimi K2.5), same 20 problems, different prompting strategy.**
 
-- **Run Benchmark**: Kimi K2.5 solves all 20 problems, code is executed, tests are verified live
-- **Test Single Problem**: Try individual problems and inspect generated code
-- **AI Analysis**: Kimi K2.5 analyzes its own benchmark results
-- **Problem Set**: Browse all 20 problems (Easy/Medium/Hard, 12 categories)
+Demonstrates the value of multi-agent orchestration (oh-my-claudecode patterns):
+
+- **A (Vanilla)**: Single prompt → direct code generation (1 API call)
+- **B (OMC-Enhanced)**: Analyst → Planner → Executor → Verifier pipeline (4 API calls)
+
+### Tabs
+- **A/B Benchmark**: Run all 20 problems in both modes, compare pass rates
+- **Single Problem A/B**: Deep-dive into a single problem with side-by-side code comparison
+- **AI Analysis**: Kimi K2.5 analyzes its own A/B results
