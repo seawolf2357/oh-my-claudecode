@@ -64,11 +64,14 @@ class SemanticScholarSearchTool(BaseTool):
     def search_for_papers(self, query: str) -> Optional[List[Dict]]:
         if not query:
             return None
-        
+
+        # Rate limiting: wait 3s between calls to avoid 429
+        time.sleep(3.0)
+
         headers = {}
         if self.S2_API_KEY:
             headers["X-API-KEY"] = self.S2_API_KEY
-        
+
         rsp = requests.get(
             "https://api.semanticscholar.org/graph/v1/paper/search",
             headers=headers,
@@ -123,10 +126,13 @@ def search_for_papers(query, result_limit=10) -> Union[None, List[Dict]]:
         )
     else:
         headers["X-API-KEY"] = S2_API_KEY
-    
+
     if not query:
         return None
-    
+
+    # Rate limiting: wait 3s between calls to avoid 429 (free tier = 1 req/sec)
+    time.sleep(3.0)
+
     rsp = requests.get(
         "https://api.semanticscholar.org/graph/v1/paper/search",
         headers=headers,

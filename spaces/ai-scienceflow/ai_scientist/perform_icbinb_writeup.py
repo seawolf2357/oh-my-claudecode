@@ -6,6 +6,7 @@ import os.path as osp
 import re
 import shutil
 import subprocess
+import time
 import traceback
 import unicodedata
 import uuid
@@ -29,6 +30,82 @@ from ai_scientist.perform_vlm_review import (
     detect_duplicate_figures,
 )
 from ai_scientist.vlm import create_client as create_vlm_client
+
+
+def extract_latex_from_response(response):
+    """
+    Extract LaTeX code from LLM response with multiple fallback strategies.
+    This is the ROOT FIX for the empty paper problem — the LLM may return
+    LaTeX in various formats, not just ```latex...``` blocks.
+    """
+    if not response or not response.strip():
+        return None
+
+    # Strategy 1: ```latex ... ```
+    match = re.search(r"```latex\s*\n?(.*?)```", response, re.DOTALL)
+    if match:
+        code = match.group(1).strip()
+        if "\\begin{document}" in code or "\\section" in code or "\\documentclass" in code:
+            return code
+
+    # Strategy 2: ``` ... ``` (generic code block containing LaTeX)
+    match = re.search(r"```\s*\n?(.*?)```", response, re.DOTALL)
+    if match:
+        code = match.group(1).strip()
+        if "\\begin{document}" in code or "\\section" in code or "\\documentclass" in code:
+            return code
+
+    # Strategy 3: Raw LaTeX starting with \documentclass
+    if "\\documentclass" in response:
+        start = response.index("\\documentclass")
+        # Find \end{document} if present
+        end_marker = "\\end{document}"
+        if end_marker in response[start:]:
+            end = response.index(end_marker, start) + len(end_marker)
+            return response[start:end].strip()
+        else:
+            return response[start:].strip()
+
+    # Strategy 4: Response contains LaTeX sections but no \documentclass
+    if "\\section{" in response and ("\\begin{abstract}" in response or "\\maketitle" in response):
+        # Try to find the LaTeX content boundaries
+        lines = response.split("\n")
+        latex_lines = []
+        in_latex = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("```"):
+                in_latex = not in_latex
+                continue
+            if in_latex or any(marker in stripped for marker in [
+                "\\documentclass", "\\usepackage", "\\begin{", "\\end{",
+                "\\section", "\\title", "\\author", "\\maketitle",
+                "\\includegraphics", "\\cite{", "\\label{", "\\ref{",
+                "\\caption{", "\\bibliography", "\\appendix",
+            ]) or (latex_lines and stripped):
+                latex_lines.append(line)
+                if not in_latex:
+                    in_latex = True
+        if latex_lines:
+            result = "\n".join(latex_lines).strip()
+            if len(result) > 500:  # Must be substantial
+                return result
+
+    # Strategy 5: If the entire response looks like LaTeX (>50% LaTeX commands)
+    latex_indicators = ["\\section", "\\begin{", "\\end{", "\\cite", "\\ref", "\\label"]
+    indicator_count = sum(response.count(ind) for ind in latex_indicators)
+    if indicator_count > 5 and len(response) > 1000:
+        # Strip any leading/trailing non-LaTeX text
+        lines = response.strip().split("\n")
+        # Find first line with LaTeX content
+        start_idx = 0
+        for i, line in enumerate(lines):
+            if any(ind in line for ind in ["\\documentclass", "\\begin{filecontents}", "\\usepackage"]):
+                start_idx = i
+                break
+        return "\n".join(lines[start_idx:]).strip()
+
+    return None
 
 
 def remove_accents_and_clean(s):
@@ -743,7 +820,7 @@ def filter_experiment_summaries(exp_summaries, step_name):
     return filtered_summaries
 
 
-def gather_citations(base_folder, num_cite_rounds=20, small_model="gpt-4o-2024-05-13"):
+def gather_citations(base_folder, num_cite_rounds=10, small_model="gpt-4o-2024-05-13"):
     """
     Gather citations for a paper, with ability to resume from previous progress.
 
@@ -859,7 +936,7 @@ def perform_writeup(
     base_folder,
     citations_text=None,
     no_writing=False,
-    num_cite_rounds=20,
+    num_cite_rounds=10,
     small_model="gpt-4o-2024-05-13",
     big_model="o1-2024-12-17",
     n_writeup_reflections=3,
@@ -1044,10 +1121,17 @@ def perform_writeup(
             print_debug=False,
         )
 
-        latex_code_match = re.search(r"```latex(.*?)```", response, re.DOTALL)
-        if not latex_code_match:
-            return False
-        updated_latex_code = latex_code_match.group(1).strip()
+        updated_latex_code = extract_latex_from_response(response)
+        if not updated_latex_code:
+            print("WARNING: Could not extract LaTeX from LLM response. Trying raw response...")
+            # Last resort: if response is long enough, use it as-is (minus obvious non-LaTeX)
+            if len(response) > 2000 and ("\\section" in response or "\\begin" in response):
+                updated_latex_code = response.strip()
+                print(f"Using raw response as LaTeX ({len(updated_latex_code)} chars)")
+            else:
+                print(f"FATAL: No LaTeX content found in response ({len(response)} chars). First 500: {response[:500]}")
+                return False
+        print(f"Extracted LaTeX: {len(updated_latex_code)} chars")
         with open(writeup_file, "w") as f:
             f.write(updated_latex_code)
 
@@ -1145,17 +1229,14 @@ Ensure proper citation usage:
             )
 
             # 2nd run:
-            reflection_code_match = re.search(
-                r"```latex(.*?)```", reflection_response, re.DOTALL
-            )
-            if reflection_code_match:
-                reflected_latex_code = reflection_code_match.group(1).strip()
+            reflected_latex_code = extract_latex_from_response(reflection_response)
+            if reflected_latex_code:
                 if reflected_latex_code != current_latex:
                     final_text = reflected_latex_code
                     cleanup_map = {
                         "</end": r"\\end",
                         "</begin": r"\\begin",
-                        "’": "'",
+                        "\u2019": "’",
                     }
                     for bad_str, repl_str in cleanup_map.items():
                         final_text = final_text.replace(bad_str, repl_str)
@@ -1218,17 +1299,14 @@ If you believe you are done with reflection, simply say: "I am done"."""
                 )
                 break
 
-            reflection_code_match = re.search(
-                r"```latex(.*?)```", reflection_response, re.DOTALL
-            )
-            if reflection_code_match:
-                reflected_latex_code = reflection_code_match.group(1).strip()
+            reflected_latex_code = extract_latex_from_response(reflection_response)
+            if reflected_latex_code:
                 if reflected_latex_code != current_latex:
                     final_text = reflected_latex_code
                     cleanup_map = {
                         "</end": r"\\end",
                         "</begin": r"\\begin",
-                        "’": "'",
+                        "\u2019": "’",
                     }
                     for bad_str, repl_str in cleanup_map.items():
                         final_text = final_text.replace(bad_str, repl_str)
@@ -1270,17 +1348,14 @@ USE MINIMAL EDITS TO OPTIMIZE THE PAGE LIMIT USAGE."""
 
         print(f"reflection step {i+1}")
 
-        reflection_code_match = re.search(
-            r"```latex(.*?)```", reflection_response, re.DOTALL
-        )
-        if reflection_code_match:
-            reflected_latex_code = reflection_code_match.group(1).strip()
+        reflected_latex_code = extract_latex_from_response(reflection_response)
+        if reflected_latex_code:
             if reflected_latex_code != current_latex:
                 final_text = reflected_latex_code
                 cleanup_map = {
                     "</end": r"\\end",
                     "</begin": r"\\begin",
-                    "’": "'",
+                    "\u2019": "’",
                 }
                 for bad_str, repl_str in cleanup_map.items():
                     final_text = final_text.replace(bad_str, repl_str)
