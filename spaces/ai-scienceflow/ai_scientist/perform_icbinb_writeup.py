@@ -22,6 +22,7 @@ from ai_scientist.llm import (
 from ai_scientist.utils.token_tracker import track_token_usage
 
 from ai_scientist.tools.semantic_scholar import search_for_papers
+from ai_scientist.tools.brave_search import search_with_fallback, comprehensive_literature_search
 
 from ai_scientist.perform_vlm_review import (
     generate_vlm_img_review,
@@ -525,14 +526,15 @@ This JSON will be automatically parsed, so ensure the format is precise."""
         json_output = extract_json_between_markers(text)
         assert json_output is not None, "Failed to extract JSON from LLM output"
         query = json_output["Query"]
-        papers = search_for_papers(query, result_limit=5)
+        # Try S2 first, fall back to Brave Search
+        papers = search_with_fallback(query, result_limit=5)
     except Exception:
         print("EXCEPTION in get_citation_addition (initial search):")
         print(traceback.format_exc())
         return None, False
 
     if papers is None:
-        print("No papers found.")
+        print("No papers found via S2 or Brave.")
         return None, False
 
     paper_strings = []
@@ -864,6 +866,40 @@ def gather_citations(base_folder, num_cite_rounds=10, small_model="gpt-4o-2024-0
             exp_summaries, step_name="citation_gathering"
         )
         filtered_summaries_str = json.dumps(filtered_summaries, indent=2)
+
+        # Pre-populate citations via Brave Search bulk keyword expansion
+        if current_round == 0 and not citations_text and os.getenv("BRAVE_API_KEY"):
+            try:
+                print("[Citations] Running Brave Search bulk keyword expansion...")
+                search_result = comprehensive_literature_search(
+                    idea_text[:2000] if idea_text else "deep learning research",
+                    num_keywords=50,
+                )
+                brave_papers = search_result.get("papers", [])
+                if brave_papers:
+                    for bp in brave_papers[:20]:  # Top 20 most relevant
+                        title = bp.get("title", "Unknown")
+                        url = bp.get("url", "")
+                        year = bp.get("year", 2024)
+                        # Generate a cite key from title
+                        cite_key = re.sub(r'[^a-zA-Z0-9]', '', title[:30]).lower()
+                        if cite_key and cite_key not in citations_text:
+                            bib_entry = f"""% Found via Brave Search
+@misc{{{cite_key}{year},
+  title = {{{title}}},
+  year = {{{year}}},
+  url = {{{url}}},
+  note = {{Retrieved via web search}}
+}}"""
+                            citations_text += "\n" + bib_entry
+                    print(f"[Citations] Pre-populated {min(len(brave_papers), 20)} citations from Brave Search")
+                    # Save initial cache
+                    with open(citations_cache_path, "w") as f:
+                        f.write(citations_text)
+                    with open(progress_path, "w") as f:
+                        json.dump({"completed_rounds": 0, "status": "brave_preload"}, f)
+            except Exception as e:
+                print(f"[Citations] Brave bulk search failed (non-fatal): {e}")
 
         # Run small model for citation additions
         client, client_model = create_client(small_model)

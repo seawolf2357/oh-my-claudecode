@@ -14,6 +14,7 @@ from typing import Dict, Any, List, Optional, Callable
 
 from ai_scientist.llm import get_response_from_llm, create_client
 from ai_scientist.tools.semantic_scholar import search_for_papers
+from ai_scientist.tools.brave_search import search_with_fallback
 
 
 # ── Tool Definitions ──
@@ -119,7 +120,8 @@ def _execute_tool(call: Dict[str, Any], base_folder: str, summaries: Dict) -> st
         if not query:
             return "Error: No query provided."
         try:
-            papers = search_for_papers(query, result_limit=3)
+            # S2 with Brave fallback
+            papers = search_with_fallback(query, result_limit=3)
             if not papers:
                 return f"No papers found for query: {query}"
             results = []
