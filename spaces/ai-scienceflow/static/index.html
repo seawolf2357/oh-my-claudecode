@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI ScienceFlow</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <header class="header">
+    <div class="header-left">
+      <h1>AI ScienceFlow</h1>
+      <p class="subtitle">Autonomous Scientific Research Platform</p>
+    </div>
+    <div class="header-right">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Ready</span>
+    </div>
+  </header>
+
+  <!-- Step Navigation -->
+  <nav class="steps">
+    <button class="step active" data-step="1" onclick="showStep(1)">
+      <span class="step-num">1</span>
+      <span class="step-label">Setup</span>
+    </button>
+    <div class="step-arrow">&rarr;</div>
+    <button class="step" data-step="2" onclick="showStep(2)">
+      <span class="step-num">2</span>
+      <span class="step-label">Ideation</span>
+    </button>
+    <div class="step-arrow">&rarr;</div>
+    <button class="step" data-step="3" onclick="showStep(3)">
+      <span class="step-num">3</span>
+      <span class="step-label">Experiment</span>
+    </button>
+    <div class="step-arrow">&rarr;</div>
+    <button class="step" data-step="4" onclick="showStep(4)">
+      <span class="step-num">4</span>
+      <span class="step-label">Results</span>
+    </button>
+  </nav>
+
+  <!-- Step 1: Setup -->
+  <section id="step1" class="panel active">
+    <div class="panel-grid">
+      <div class="card">
+        <h2>LLM API Configuration</h2>
+        <div class="form-group">
+          <label>Provider</label>
+          <select id="llmProvider" onchange="onProviderChange()">
+            <option value="fireworks">Fireworks AI (kimi-k2p5)</option>
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="openai">OpenAI (GPT-4o)</option>
+            <option value="custom">Custom API</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>API Key</label>
+          <input type="password" id="apiKey" placeholder="Enter API key...">
+        </div>
+        <div class="form-group" id="customUrlGroup" style="display:none">
+          <label>Base URL</label>
+          <input type="text" id="customUrl" placeholder="https://api.example.com/v1">
+        </div>
+        <div class="form-group" id="customModelGroup" style="display:none">
+          <label>Model Name</label>
+          <input type="text" id="customModel" placeholder="model-name">
+        </div>
+        <button class="btn btn-primary" onclick="saveConfig()">Save Configuration</button>
+        <div id="configStatus" class="status-msg"></div>
+      </div>
+
+      <div class="card">
+        <h2>Reference Materials</h2>
+        <p class="hint">Upload PDF, CSV, TXT, or DOCX files to provide research context</p>
+        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()"
+             ondragover="event.preventDefault();this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="handleDrop(event)">
+          <div class="upload-icon">&#128206;</div>
+          <p>Click or drag files here</p>
+          <small>PDF, CSV, TXT, DOCX</small>
+        </div>
+        <input type="file" id="fileInput" style="display:none" accept=".pdf,.csv,.txt,.md,.docx" onchange="uploadFile(this)">
+        <div id="uploadedFiles" class="file-list"></div>
+      </div>
+    </div>
+
+    <!-- Ontology Graph -->
+    <div class="card" id="graphCard" style="display:none">
+      <h2>Knowledge Graph</h2>
+      <div id="graphContainer" class="graph-container"></div>
+    </div>
+  </section>
+
+  <!-- Step 2: Ideation -->
+  <section id="step2" class="panel">
+    <div class="panel-grid">
+      <div class="card">
+        <h2>Research Topic</h2>
+        <textarea id="topicInput" rows="6" placeholder="Describe your research topic or area of interest...&#10;&#10;Example: Exploring novel attention mechanisms for efficient transformer architectures"></textarea>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Number of Ideas</label>
+            <input type="number" id="maxIdeas" value="3" min="1" max="10">
+          </div>
+          <div class="form-group">
+            <label>Reflections</label>
+            <input type="number" id="numReflections" value="3" min="1" max="10">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-lg" onclick="generateIdeas()" id="ideaBtn">Generate Ideas</button>
+      </div>
+      <div class="card">
+        <h2>Generated Ideas</h2>
+        <div id="ideasContainer" class="ideas-container">
+          <p class="placeholder">Ideas will appear here after generation...</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Step 3: Experiment -->
+  <section id="step3" class="panel">
+    <div class="panel-grid">
+      <div class="card">
+        <h2>Experiment Configuration</h2>
+        <div class="form-group">
+          <label>Selected Idea (JSON)</label>
+          <textarea id="expIdeaJson" rows="12" placeholder="Idea JSON will be auto-filled from Step 2..."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Citation Rounds</label>
+            <input type="number" id="citeRounds" value="3" min="1" max="10">
+          </div>
+          <label class="checkbox-label">
+            <input type="checkbox" id="skipWriteup"> Skip Writeup
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="skipReview"> Skip Review
+          </label>
+        </div>
+        <button class="btn btn-primary btn-lg" onclick="startExperiment()" id="expBtn">Start Experiment</button>
+      </div>
+      <div class="card">
+        <h2>Live Logs</h2>
+        <div id="logContainer" class="log-container"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Step 4: Results -->
+  <section id="step4" class="panel">
+    <div class="card">
+      <h2>Experiment Results</h2>
+      <div class="form-row">
+        <select id="expSelect" onchange="loadResults(this.value)">
+          <option value="">Select experiment...</option>
+        </select>
+        <button class="btn" onclick="refreshExpList()">Refresh</button>
+      </div>
+    </div>
+    <div id="resultsContainer" style="display:none">
+      <div class="card">
+        <h2>Figures</h2>
+        <div id="figuresGrid" class="figures-grid"></div>
+      </div>
+      <div class="card">
+        <h2>Summary</h2>
+        <pre id="summaryContent" class="summary-pre"></pre>
+      </div>
+      <div class="card" id="reviewCard" style="display:none">
+        <h2>Review</h2>
+        <pre id="reviewContent" class="summary-pre"></pre>
+      </div>
+      <div class="card" id="pdfCard" style="display:none">
+        <h2>Paper PDF</h2>
+        <a id="pdfLink" class="btn btn-primary" target="_blank">Download PDF</a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
