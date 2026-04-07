@@ -1,0 +1,79 @@
+# path to the task data directory
+data_dir: "data"
+preprocess_data: False
+
+goal: null
+eval: null
+
+log_dir: logs
+workspace_dir: workspaces
+
+# whether to copy the data to the workspace directory (otherwise it will be symlinked)
+# copying is recommended to prevent the agent from accidentally modifying the original data
+copy_data: True
+
+exp_name: run # a random experiment name will be generated if not provided
+
+# settings for code execution
+exec:
+  timeout: 3600
+  agent_file_name: runfile.py
+  format_tb_ipython: False
+
+generate_report: True
+# LLM settings for final report from journal
+report:
+  model: fireworks/accounts/fireworks/models/kimi-k2p5
+  temp: 1.0
+
+experiment:
+  num_syn_datasets: 1
+
+debug:
+  stage4: False
+
+# agent hyperparams
+agent:
+  type: parallel
+  num_workers: 1                    # T4 1장에 맞춤 (4→1)
+  stages:
+    stage1_max_iters: 8             # 조기종료 있어서 충분 (20→8)
+    stage2_max_iters: 5             # 가벼운 튜닝 (12→5)
+    stage3_max_iters: 0             # 생략
+    stage4_max_iters: 0             # 생략
+  steps: 5
+  k_fold_validation: 1
+  multi_seed_eval:
+    num_seeds: 1                    # 재평가 비활성화 (3→1)
+  expose_prediction: False
+  data_preview: False
+
+  # LLM settings for coding
+  code:
+    model: fireworks/accounts/fireworks/models/kimi-k2p5
+    temp: 1.0
+    max_tokens: 12000
+
+  # LLM settings for evaluating program output / tracebacks
+  feedback:
+    model: fireworks/accounts/fireworks/models/kimi-k2p5
+    temp: 0.5
+    max_tokens: 8192
+
+  vlm_feedback:
+    model: fireworks/accounts/fireworks/models/kimi-k2p5
+    temp: 0.5
+    max_tokens: null
+
+  search:
+    max_debug_depth: 1              # 디버그 깊이 축소 (3→1)
+    debug_prob: 0.2                 # 디버그 확률 축소 (0.5→0.2)
+    num_drafts: 1                   # 단일 초안 (3→1)
+
+  summary:
+    model: fireworks/accounts/fireworks/models/kimi-k2p5
+    temp: 0.3
+
+  select_node:
+    model: fireworks/accounts/fireworks/models/kimi-k2p5
+    temp: 0.3

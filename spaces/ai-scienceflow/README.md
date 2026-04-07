@@ -23,58 +23,80 @@ FastAPI backend + vanilla JS/CSS/HTML SPA with 4-step workflow:
 3. **Experiment** — BFTS tree search pipeline with live WebSocket logs
 4. **Results** — Figures, summaries, review, PDF paper
 
-## Known Issues & Fixes
+## Fixes Applied (v3.1)
 
-### 1. Semantic Scholar Infinite Backoff (Critical)
+### 1. Missing Module Files (Critical — 5 ImportErrors fixed)
 
-**File**: `ai_scientist/tools/semantic_scholar.py`
-**Problem**: `@backoff.on_exception` has no `max_tries` — 429 rate limits cause infinite retry with exponential wait (1647s+ observed).
-**Fix**: `patches/fix_semantic_scholar_backoff.py` — adds `max_tries=5, max_time=120`
-
-### 2. Plot Aggregation SyntaxError (High)
-
-**File**: `ai_scientist/perform_plotting.py`
-**Problem**: `extract_code_snippet` fails on malformed LLM output (partial markdown fences, mixed text+code).
-**Fix**: `patches/fix_plot_aggregation_syntax.py` — robust multi-strategy code extraction
-
-### 3. Paper Generation Empty Templates (Medium)
-
-All 3 completed experiments produced placeholder `template.tex` with no actual content written. The writeup pipeline (`perform_icbinb_writeup.py`) needs investigation — the ReACT agent generates section drafts but they may not be injected into the LaTeX template.
-
-### 4. Missing Review Module (Low)
-
-`perform_review.py` and `perform_vlm_review.py` need to be copied from v2 Space to v3.
-
-## Experiment Results Analysis
-
-Three experiments completed on the platform (stored in `SeaWolf-AI/ai-scientist-results`):
-
-| Experiment | Quality | Key Finding |
+| Missing File | Dependents | Fix |
 |---|---|---|
-| Neuro-Symbolic Epistemic Gates | 2/10 | 100% hallucination, broken evaluation metrics |
-| Context-Aware Multimodal Translation | 3/10 | Trivially easy synthetic task, 100% accuracy meaningless |
-| Neurosurgical Crossover | 5/10 | Genuine proof-of-concept: 86-89% capability retention |
+| `tools/base_tool.py` | `semantic_scholar.py` | Created BaseTool base class |
+| `perform_llm_review.py` | `perform_vlm_review.py` → writeup | Created with `load_paper()` + `perform_review()` |
+| `perform_review.py` | `app.py` (v3) | Created compatibility re-export module |
+| `utils/token_tracker.py` | `llm.py`, `vlm.py` | Created TokenTracker with `@track_token_usage` decorator |
+| `__init__.py` (6 files) | All module imports | Created for all packages |
 
-### Detailed Findings
+### 2. Blank LaTeX Template Missing (Critical — Root cause of empty papers)
 
-**Neurosurgical Crossover** (best result):
-- Parent A accuracy: 97.84%, Offspring: 84.55%
-- Demonstrates real neural network crossover with capability retention
-- Legitimate proof-of-concept despite simplified setup
+`blank_icbinb_latex/template.tex` did not exist. Writeup pipeline copied from this directory to create `latex/template.tex`. Without it, no paper content could be generated.
 
-**Key pipeline issues across all experiments**:
-- Stage 1 (BFTS tree search) works correctly
-- Writeup stage fails to populate template.tex with actual content
-- Citation gathering blocked by Semantic Scholar rate limits
-- Plot aggregation crashes on malformed LLM code output
+**Fix**: Created complete ICBINB workshop template with all sections.
+
+### 3. Semantic Scholar 429 Giveup (High)
+
+Added `giveup` handler to both `@backoff.on_exception` decorators — immediately stops retrying on 403/429 instead of infinite exponential backoff.
+
+### 4. VLM Client Crash in Writeup (High)
+
+`perform_icbinb_writeup.py` created VLM client with `small_model` (defaults to `gpt-4o`) which fails when only Fireworks API key is available.
+
+**Fixes**:
+- VLM client now uses `big_model` (fireworks) instead of `small_model`
+- VLM client initialized before try block, used as guard in reflection loops
+- All VLM calls wrapped in try/except with graceful fallback
+
+### 5. Plot Aggregation Code Extraction (Medium)
+
+`extract_code_snippet` already had multi-strategy fallbacks. Verified working for: standard fences, generic fences, partial fences, raw Python.
+
+## Module Structure
+
+```
+ai_scientist/
+├── __init__.py
+├── llm.py                          # LLM client + routing (Fireworks/Claude/GPT/Ollama/Gemini)
+├── vlm.py                          # Vision-Language Model support
+├── perform_plotting.py             # Plot aggregation with LLM
+├── perform_icbinb_writeup.py       # Full writeup pipeline (citations + ReACT + reflections)
+├── perform_llm_review.py           # Paper review (load_paper + perform_review)
+├── perform_review.py               # Compatibility re-export
+├── perform_vlm_review.py           # VLM-based figure review
+├── react_writeup_agent.py          # ReACT pattern section writer
+├── knowledge_graph.py              # Optional Zep GraphRAG / keyword fallback
+├── blank_icbinb_latex/
+│   └── template.tex                # ICBINB workshop LaTeX template
+├── tools/
+│   ├── base_tool.py                # BaseTool abstract class
+│   └── semantic_scholar.py         # Semantic Scholar API with backoff
+├── utils/
+│   └── token_tracker.py            # Token usage tracking
+└── treesearch/
+    ├── bfts_utils.py               # BFTS utilities
+    ├── journal.py                  # Experiment journal
+    ├── agent_manager.py            # Agent orchestration
+    ├── parallel_agent.py           # Parallel agent execution
+    ├── perform_experiments_bfts_with_agentmanager.py
+    ├── backend/
+    │   ├── backend_openai.py       # OpenAI-compatible backend
+    │   └── backend_anthropic.py    # Anthropic backend
+    └── utils/
+        └── response.py
+```
 
 ## Deployment
 
-```bash
-# Apply patches before deploying
-python patches/fix_semantic_scholar_backoff.py ai_scientist/tools/semantic_scholar.py
-python patches/fix_plot_aggregation_syntax.py  # self-test mode
+Requires: `FIREWORKS_API_KEY`, `HF_TOKEN` environment variables.
 
-# Deploy to HF Space
-# Requires: FIREWORKS_API_KEY, HF_TOKEN environment variables
+```bash
+docker build -t ai-scienceflow .
+docker run -p 7860:7860 -e FIREWORKS_API_KEY=... -e HF_TOKEN=... ai-scienceflow
 ```
