@@ -109,6 +109,56 @@ def extract_latex_from_response(response):
     return None
 
 
+def _fix_figure_references(latex_text, available_figs):
+    """
+    Replace invalid figure references in LaTeX with the closest matching
+    available figure file. This fixes the root cause of PDF compilation failure.
+    """
+    if not available_figs:
+        return latex_text
+
+    available_set = set(available_figs)
+
+    def find_best_match(invalid_name):
+        """Find the most similar available figure filename."""
+        invalid_lower = invalid_name.lower().replace("_", " ").replace("-", " ")
+        best_score = -1
+        best_match = available_figs[0]  # fallback to first available
+
+        for avail in available_figs:
+            avail_lower = avail.lower().replace("_", " ").replace("-", " ")
+            # Count shared words
+            invalid_words = set(invalid_lower.replace(".png", "").split())
+            avail_words = set(avail_lower.replace(".png", "").split())
+            shared = len(invalid_words & avail_words)
+            # Bonus for similar prefixes
+            if invalid_lower[:5] == avail_lower[:5]:
+                shared += 2
+            if shared > best_score:
+                best_score = shared
+                best_match = avail
+        return best_match
+
+    def replace_fig(match):
+        full_match = match.group(0)
+        fig_name = match.group(1)
+        base_name = os.path.basename(fig_name)
+
+        if base_name in available_set:
+            return full_match  # Already valid
+
+        replacement = find_best_match(base_name)
+        print(f"[FigFix] {base_name} → {replacement}")
+        return full_match.replace(fig_name, replacement)
+
+    fixed = re.sub(
+        r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}",
+        replace_fig,
+        latex_text,
+    )
+    return fixed
+
+
 def remove_accents_and_clean(s):
     # Normalize to separate accents
     nfkd_form = unicodedata.normalize("NFKD", s)
@@ -696,10 +746,12 @@ We also have a script used to produce the final plots (use this to see how the p
 ```
 Please also consider which plots can naturally be grouped together as subfigures.
 
-Available plots for the writeup (use these filenames):
+Available plots for the writeup — use ONLY these EXACT filenames in \\includegraphics commands:
 ```
 {plot_list}
 ```
+CRITICAL: You MUST use the EXACT filenames listed above. Do NOT invent new filenames.
+Example: \\includegraphics[width=0.8\\textwidth]{{figure_1_training_dynamics.png}}
 
 We also have VLM-based figure descriptions:
 ```
@@ -1168,6 +1220,8 @@ def perform_writeup(
                 print(f"FATAL: No LaTeX content found in response ({len(response)} chars). First 500: {response[:500]}")
                 return False
         print(f"Extracted LaTeX: {len(updated_latex_code)} chars")
+        # Fix invalid figure references before writing
+        updated_latex_code = _fix_figure_references(updated_latex_code, plot_names)
         with open(writeup_file, "w") as f:
             f.write(updated_latex_code)
 
@@ -1277,6 +1331,7 @@ Ensure proper citation usage:
                     for bad_str, repl_str in cleanup_map.items():
                         final_text = final_text.replace(bad_str, repl_str)
                     final_text = re.sub(r"(\d+(?:\.\d+)?)%", r"\1\\%", final_text)
+                    final_text = _fix_figure_references(final_text, plot_names)
 
                     with open(writeup_file, "w") as fo:
                         fo.write(final_text)
@@ -1347,6 +1402,7 @@ If you believe you are done with reflection, simply say: "I am done"."""
                     for bad_str, repl_str in cleanup_map.items():
                         final_text = final_text.replace(bad_str, repl_str)
                     final_text = re.sub(r"(\d+(?:\.\d+)?)%", r"\1\\%", final_text)
+                    final_text = _fix_figure_references(final_text, plot_names)
 
                     with open(writeup_file, "w") as fo:
                         fo.write(final_text)
