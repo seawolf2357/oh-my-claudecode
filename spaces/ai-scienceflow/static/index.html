@@ -21,6 +21,45 @@
     </div>
   </header>
 
+  <!-- Supported Domains Banner -->
+  <div class="domains-banner">
+    <div class="domains-grid">
+      <div class="domain-chip cs">
+        <span class="domain-icon">&#128187;</span>
+        <div><strong>Computer Science</strong><span>ML/DL, NLP, CV, Algorithms</span></div>
+      </div>
+      <div class="domain-chip bio">
+        <span class="domain-icon">&#129516;</span>
+        <div><strong>Bio / Medical</strong><span>Genomics, Drug Discovery, Protein Folding</span></div>
+      </div>
+      <div class="domain-chip chem">
+        <span class="domain-icon">&#9879;</span>
+        <div><strong>Chemistry</strong><span>Molecular Simulation, Reaction Prediction</span></div>
+      </div>
+      <div class="domain-chip physics">
+        <span class="domain-icon">&#9883;</span>
+        <div><strong>Physics</strong><span>Quantum, Fluid Dynamics, Materials</span></div>
+      </div>
+      <div class="domain-chip astro">
+        <span class="domain-icon">&#128301;</span>
+        <div><strong>Astronomy</strong><span>Spectral Analysis, Exoplanet Detection</span></div>
+      </div>
+      <div class="domain-chip social">
+        <span class="domain-icon">&#128200;</span>
+        <div><strong>Social Science</strong><span>Statistical Modeling, NLP Analysis</span></div>
+      </div>
+      <div class="domain-chip math">
+        <span class="domain-icon">&#128290;</span>
+        <div><strong>Mathematics</strong><span>Numerical Methods, Optimization</span></div>
+      </div>
+      <div class="domain-chip env">
+        <span class="domain-icon">&#127758;</span>
+        <div><strong>Earth / Env Science</strong><span>Climate Modeling, Remote Sensing</span></div>
+      </div>
+    </div>
+    <p class="domains-note">Supports any research domain where experiments can be expressed as <strong>computational simulations</strong> (Python code generation &rarr; execution &rarr; metric evaluation)</p>
+  </div>
+
   <!-- Step Navigation -->
   <nav class="steps">
     <button class="step active" data-step="1" onclick="showStep(1)">
@@ -102,7 +141,7 @@
     <div class="panel-grid">
       <div class="card">
         <h2>Research Topic</h2>
-        <textarea id="topicInput" rows="6" placeholder="Describe your research topic or area of interest...&#10;&#10;Example: Exploring novel attention mechanisms for efficient transformer architectures"></textarea>
+        <textarea id="topicInput" rows="6" placeholder="Describe your research topic or area of interest...&#10;&#10;Examples:&#10;  CS: Novel attention mechanisms for efficient transformers&#10;  Bio: CRISPR off-target prediction using graph neural networks&#10;  Chem: Molecular property prediction with 3D conformer models&#10;  Physics: Neural PDE solvers for turbulent flow simulation&#10;  Astro: Light curve classification for transient detection"></textarea>
         <div class="form-row">
           <div class="form-group">
             <label>Number of Ideas</label>

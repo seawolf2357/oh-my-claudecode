@@ -108,23 +108,52 @@ async def upload_file(file: UploadFile = File(...)):
     return {"filename": file.filename, "text_length": len(text), "preview": text[:500], "ontology": ontology}
 
 
+def _fix_json(s: str) -> str:
+    """Fix common JSON issues from LLM output."""
+    # Remove trailing commas before } or ]
+    s = re.sub(r',\s*([}\]])', r'\1', s)
+    # Fix unescaped quotes inside strings (common LLM mistake)
+    # Replace smart quotes with regular quotes
+    s = s.replace('\u201c', '"').replace('\u201d', '"')
+    s = s.replace('\u2018', "'").replace('\u2019', "'")
+    # Remove control characters
+    s = re.sub(r'[\x00-\x1f\x7f]', ' ', s)
+    # Fix missing commas between objects: }{ -> },{
+    s = re.sub(r'\}\s*\{', '},{', s)
+    # Fix missing commas between strings: "..." "..." -> "...", "..."
+    s = re.sub(r'"\s*\n\s*"', '",\n"', s)
+    return s
+
+
 def _generate_ontology(text: str) -> dict:
     try:
         from ai_scientist.llm import create_client, get_response_from_llm
         model_name = os.getenv("FIREWORKS_MODEL", "fireworks/accounts/fireworks/models/kimi-k2p5")
         client, model = create_client(model_name)
-        prompt = f"""Analyze text and extract a knowledge graph. Return JSON:
-{{"nodes":[{{"id":"str","label":"str","type":"person|org|concept|event|method"}}],"edges":[{{"source":"id","target":"id","label":"relation"}}]}}
-Extract 10-20 important entities and their relationships. Text:\n{text[:4000]}\nReturn ONLY valid JSON, no explanation."""
+        prompt = f"""Extract a knowledge graph from the text below.
+Return ONLY a JSON object with this exact structure (no other text):
+{{"nodes":[{{"id":"n1","label":"Name","type":"concept"}}],"edges":[{{"source":"n1","target":"n2","label":"relation"}}]}}
+
+Rules:
+- type must be one of: person, org, concept, event, method
+- id must be simple strings like n1, n2, n3...
+- label must be short (under 30 chars), no special characters
+- Extract 8-15 entities maximum
+- All strings must use double quotes, no single quotes
+- No trailing commas
+
+Text:
+{text[:3000]}"""
         response, _ = get_response_from_llm(prompt=prompt, client=client, model=model,
-            system_message="You are a knowledge graph expert. Output only valid JSON, nothing else.")
-        # Strip <think> tags from models with extended thinking
+            system_message="Output ONLY valid JSON. No explanation, no markdown, no code fences.")
+        # Strip <think> tags
         if '<think>' in response:
             response = re.sub(r'<think>[\s\S]*?</think>', '', response).strip()
-        # Strip markdown code fences
-        response = re.sub(r'```json\s*', '', response)
-        response = re.sub(r'```\s*', '', response)
-        # Find outermost JSON object
+        # Strip markdown fences
+        response = re.sub(r'```(?:json)?\s*', '', response).strip()
+
+        # Try parsing with progressive JSON fixing
+        # Attempt 1: Find outermost { } and try direct parse
         depth = 0
         start = -1
         for i, c in enumerate(response):
@@ -135,20 +164,53 @@ Extract 10-20 important entities and their relationships. Text:\n{text[:4000]}\n
             elif c == '}':
                 depth -= 1
                 if depth == 0 and start >= 0:
+                    candidate = response[start:i+1]
+                    # Try direct parse
                     try:
-                        result = json.loads(response[start:i+1])
+                        result = json.loads(candidate)
                         if "nodes" in result:
-                            print(f"[Ontology] Generated {len(result.get('nodes',[]))} nodes, {len(result.get('edges',[]))} edges")
+                            print(f"[Ontology] OK: {len(result.get('nodes',[]))} nodes, {len(result.get('edges',[]))} edges")
                             return result
                     except json.JSONDecodeError:
-                        continue
-        # Fallback: simple regex
-        m = re.search(r'\{[\s\S]*"nodes"[\s\S]*\}', response)
-        if m:
-            return json.loads(m.group())
+                        pass
+                    # Try with fixes
+                    try:
+                        fixed = _fix_json(candidate)
+                        result = json.loads(fixed)
+                        if "nodes" in result:
+                            print(f"[Ontology] OK (fixed): {len(result.get('nodes',[]))} nodes, {len(result.get('edges',[]))} edges")
+                            return result
+                    except json.JSONDecodeError:
+                        pass
+                    # Try truncating at last valid point
+                    for end in range(len(candidate) - 1, max(0, len(candidate) - 200), -1):
+                        if candidate[end] == '}':
+                            try:
+                                truncated = candidate[:end+1]
+                                result = json.loads(_fix_json(truncated))
+                                if "nodes" in result:
+                                    print(f"[Ontology] OK (truncated): {len(result.get('nodes',[]))} nodes")
+                                    return result
+                            except json.JSONDecodeError:
+                                continue
+                    start = -1  # Reset and try next outer block
+
+        # Attempt 2: Build minimal valid JSON from what we can extract
+        print("[Ontology] Direct parse failed, extracting nodes/edges manually...")
+        nodes = []
+        edges = []
+        # Extract node-like objects
+        for m in re.finditer(r'\{[^{}]*"id"\s*:\s*"([^"]+)"[^{}]*"label"\s*:\s*"([^"]+)"[^{}]*"type"\s*:\s*"([^"]+)"[^{}]*\}', response):
+            nodes.append({"id": m.group(1), "label": m.group(2)[:30], "type": m.group(3)})
+        for m in re.finditer(r'\{[^{}]*"source"\s*:\s*"([^"]+)"[^{}]*"target"\s*:\s*"([^"]+)"[^{}]*"label"\s*:\s*"([^"]+)"[^{}]*\}', response):
+            edges.append({"source": m.group(1), "target": m.group(2), "label": m.group(3)[:30]})
+        if nodes:
+            print(f"[Ontology] Extracted manually: {len(nodes)} nodes, {len(edges)} edges")
+            return {"nodes": nodes, "edges": edges}
+
+        print(f"[Ontology] Failed to parse. Response preview: {response[:300]}")
     except Exception as e:
         print(f"[Ontology] Error: {e}")
-        import traceback; traceback.print_exc()
     return {"nodes": [], "edges": []}
 
 
