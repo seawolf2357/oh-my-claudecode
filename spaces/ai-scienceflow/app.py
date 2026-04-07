@@ -115,14 +115,40 @@ def _generate_ontology(text: str) -> dict:
         client, model = create_client(model_name)
         prompt = f"""Analyze text and extract a knowledge graph. Return JSON:
 {{"nodes":[{{"id":"str","label":"str","type":"person|org|concept|event|method"}}],"edges":[{{"source":"id","target":"id","label":"relation"}}]}}
-Extract 10-20 important entities. Text:\n{text[:4000]}\nReturn ONLY valid JSON."""
+Extract 10-20 important entities and their relationships. Text:\n{text[:4000]}\nReturn ONLY valid JSON, no explanation."""
         response, _ = get_response_from_llm(prompt=prompt, client=client, model=model,
-            system_message="You are a knowledge graph expert. Output only valid JSON.")
-        m = re.search(r'\{[\s\S]*\}', response)
+            system_message="You are a knowledge graph expert. Output only valid JSON, nothing else.")
+        # Strip <think> tags from models with extended thinking
+        if '<think>' in response:
+            response = re.sub(r'<think>[\s\S]*?</think>', '', response).strip()
+        # Strip markdown code fences
+        response = re.sub(r'```json\s*', '', response)
+        response = re.sub(r'```\s*', '', response)
+        # Find outermost JSON object
+        depth = 0
+        start = -1
+        for i, c in enumerate(response):
+            if c == '{':
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0 and start >= 0:
+                    try:
+                        result = json.loads(response[start:i+1])
+                        if "nodes" in result:
+                            print(f"[Ontology] Generated {len(result.get('nodes',[]))} nodes, {len(result.get('edges',[]))} edges")
+                            return result
+                    except json.JSONDecodeError:
+                        continue
+        # Fallback: simple regex
+        m = re.search(r'\{[\s\S]*"nodes"[\s\S]*\}', response)
         if m:
             return json.loads(m.group())
     except Exception as e:
-        print(f"[Ontology] {e}")
+        print(f"[Ontology] Error: {e}")
+        import traceback; traceback.print_exc()
     return {"nodes": [], "edges": []}
 
 
@@ -157,7 +183,16 @@ Return as JSON array."""
 
         global current_ideas
         current_ideas = ideas
-        return {"ideas": ideas, "count": len(ideas)}
+
+        # Generate ontology from ideas for visualization
+        ontology = {"nodes": [], "edges": []}
+        try:
+            ideas_text = json.dumps(ideas, ensure_ascii=False)[:6000]
+            ontology = _generate_ontology(ideas_text)
+        except Exception as oe:
+            print(f"[Ideation Ontology] {oe}")
+
+        return {"ideas": ideas, "count": len(ideas), "ontology": ontology}
     except Exception as e:
         return {"error": str(e)}
 

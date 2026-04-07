@@ -64,7 +64,7 @@ async function uploadFileObj(file) {
     // Show ontology graph
     if (d.ontology && (d.ontology.nodes || []).length > 0) {
       document.getElementById('graphCard').style.display = '';
-      renderGraph(d.ontology);
+      renderGraph(d.ontology, 'graphContainer');
     }
   } catch (e) {
     el.innerHTML += `<div class="file-item"><span>${file.name}</span><span style="color:var(--error)">Error</span></div>`;
@@ -72,10 +72,11 @@ async function uploadFileObj(file) {
 }
 
 // ── Ontology Graph (D3.js) ──
-function renderGraph(data) {
-  const container = document.getElementById('graphContainer');
+function renderGraph(data, containerId) {
+  const container = document.getElementById(containerId || 'graphContainer');
+  if (!container) return;
   container.innerHTML = '';
-  const w = container.clientWidth, h = 400;
+  const w = container.clientWidth || 600, h = 400;
 
   const svg = d3.select(container).append('svg').attr('width', w).attr('height', h);
   const g = svg.append('g');
@@ -124,6 +125,15 @@ async function generateIdeas() {
     const d = await r.json();
     if (d.error) { alert(d.error); return; }
     renderIdeas(d.ideas);
+
+    // Show ontology graph from ideation
+    if (d.ontology && (d.ontology.nodes || []).length > 0) {
+      const card = document.getElementById('ideaGraphCard');
+      if (card) {
+        card.style.display = '';
+        renderGraph(d.ontology, 'ideaGraphContainer');
+      }
+    }
   } catch (e) { alert('Error: ' + e); }
   finally { btn.disabled = false; btn.textContent = 'Generate Ideas'; }
 }
